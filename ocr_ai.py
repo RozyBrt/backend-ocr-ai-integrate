@@ -22,9 +22,13 @@ app.add_middleware(
 
 @app.post("/process-ocr")
 async def process_ocr(file: UploadFile = File(...)):
-    # 1. Validasi apakah file gambar
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File harus berupa gambar.")
+    print(f"-> Menerima file: {file.filename}, Tipe Konten: {file.content_type}")
+    
+    # Validasi dilonggarkan agar tidak gampang Error 400
+    if not file.content_type:
+        print("!! Warning: Tipe konten kosong, mencoba memproses saja...")
+    elif not file.content_type.startswith("image/"):
+        print(f"!! Warning: Tipe konten '{file.content_type}' bukan image, tetap mencoba memproses...")
     
     # 2. Baca file dan konversi ke Base64
     contents = await file.read()
