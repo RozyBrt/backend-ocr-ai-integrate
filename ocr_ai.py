@@ -58,7 +58,8 @@ async def process_ocr(file: UploadFile = File(...)):
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:{file.content_type};base64,{base64_image}"
+                            # Paksa media_type ke image/jpeg agar SumoPod tidak komplain
+                            "url": f"data:image/jpeg;base64,{base64_image}"
                         }
                     }
                 ]
