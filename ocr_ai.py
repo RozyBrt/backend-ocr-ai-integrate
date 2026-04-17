@@ -46,7 +46,7 @@ async def process_ocr(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Server Error: Kredensial API Key gagal dibaca oleh server web.")
 
     sumopod_url = os.getenv("SUMOPOD_URL", "https://ai.sumopod.com/v1/chat/completions")
-    sumopod_vision_model = os.getenv("SUMOPOD_VISION_MODEL", "claude-haiku-4-5")
+    sumopod_vision_model = os.getenv("SUMOPOD_VISION_MODEL", "gpt-4o-mini")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
