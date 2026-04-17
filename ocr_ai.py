@@ -5,15 +5,15 @@ import gc
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from dotenv import load_dotenv
 
-# Load variabels dari .env (opsional untuk testing lokal)
-load_dotenv()
+# Konfigurasi Hardcoded (Lokal/Ngrok Mode)
+SUMOPOD_API_KEY = "sk-U8jMown1Umhd_53gPH8GwA"
+SUMOPOD_URL = "https://ai.sumopod.com/v1/chat/completions"
+SUMOPOD_MODEL = "claude-haiku-4-5"
 
-app = FastAPI(title="OCR Vision Bridge API")
+app = FastAPI(title="OCR AI Bridge - Lokal")
 
-# [CORS POLICY]: Mengizinkan akses Flutter atau klien dari domain apapun ('*')
+# CORS tetap diizinkan agar Flutter tidak terblokir saat testing
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,117 +24,65 @@ app.add_middleware(
 
 @app.post("/process-ocr")
 async def process_ocr(file: UploadFile = File(...)):
-    print(f"-> Menerima file: {file.filename}, Tipe: {file.content_type}")
+    print(f"-> Menerima file: {file.filename}")
     
-    # 1. Validasi MIME Type apakah file benar-benar gambar
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File harus berupa gambar.")
     
-    # 2. Baca binary image file dan encode ke Base64
-    contents = await file.read()
-    base64_image = base64.b64encode(contents).decode('utf-8')
-    
-    # [MEMORY MANAGEMENT]: Bebaskan memori binary sesegera mungkin
-    del contents
-    gc.collect()
-
-    # 3. Setup koneksi ke SumoPod API (Utamakan membaca dari os.getenv / konfigurasi Render.com)
-    api_key = os.getenv("API_KEY_SUMOPOD") or os.getenv("SUMOPOD_API_KEY", "")
-    api_key = api_key.strip()
-    
-    if not api_key:
-        raise HTTPException(status_code=500, detail="Server Error: Kredensial API Key gagal dibaca oleh server web.")
-
-    sumopod_url = os.getenv("SUMOPOD_URL", "https://ai.sumopod.com/v1/chat/completions")
-    sumopod_vision_model = os.getenv("SUMOPOD_VISION_MODEL", "claude-haiku-4-5")
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    censored_key = api_key[:4] + "***" + api_key[-4:] if len(api_key) > 8 else "***"
-    print(f"-> Mengirim request ke SumoPod URL: {sumopod_url}")
-    print(f"-> Menggunakan model: {sumopod_vision_model}")
-    print(f"-> Headers dikirim: {{'Authorization': 'Bearer {censored_key}', 'Content-Type': 'application/json'}}")
-
-    # [CLEAN OUTPUT]: Pesan instruksi OCR yang strict tanpa basa-basi
-    prompt_text = (
-        "Tugas Anda adalah melakukan OCR. Ekstrak semua teks dari gambar yang diberikan secara akurat. "
-        "Jangan tambahkan kata-kata pembuka, jangan tambahkan identitas Anda, jangan memberikan analisis. "
-        "HANYA teks yang ada di dalam gambar."
-    )
-
-    payload = {
-        "model": sumopod_vision_model,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt_text},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{file.content_type};base64,{base64_image}"
-                        }
-                    }
-                ]
-            }
-        ],
-        "max_tokens": 2000
-    }
-    
-    # 4. Melakukan HIT API ke SumoPod secara synchronous
     try:
-        response = requests.post(sumopod_url, json=payload, headers=headers, timeout=60)
+        # Baca dan encode gambar
+        contents = await file.read()
+        base64_image = base64.b64encode(contents).decode('utf-8')
+        del contents
+        gc.collect()
+
+        headers = {
+            "Authorization": f"Bearer {SUMOPOD_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        # Instruksi OCR Strict
+        payload = {
+            "model": SUMOPOD_MODEL,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Ekstrak semua teks dari gambar ini secara akurat. Jangan tambahkan kata pengantar atau analisis. HANYA hasil teks OCR saja."},
+                        {"type": "image_url", "image_url": {"url": f"data:{file.content_type};base64,{base64_image}"}}
+                    ]
+                }
+            ],
+            "max_tokens": 2000
+        }
         
-        # [MEMORY MANAGEMENT]: Bersihkan Payload base64 teks gambar yang besar setelah request terkirim
+        # Kirim ke SumoPod
+        response = requests.post(SUMOPOD_URL, json=payload, headers=headers, timeout=60)
+        
+        # Cleanup Memori
         del base64_image
         del payload
         gc.collect()
 
-        print(f"-> Balasan dari SumoPod HTTP Status: {response.status_code}")
-        
         if response.status_code != 200:
-            print(f"-> Detail Error SumoPod: {response.text}")
-            return JSONResponse(
-                content={"error": f"SumoPod API membalas status {response.status_code}", "detail": response.text}, 
-                status_code=response.status_code
-            )
+            return JSONResponse(content={"error": "SumoPod Error", "detail": response.text}, status_code=response.status_code)
 
         result = response.json()
-        raw_text = result["choices"][0]["message"]["content"]
+        hasil_teks = result["choices"][0]["message"]["content"].strip()
         
-        # Eksekusi pembersihan string dari "sampah" wrapper API/Claude
-        if "---" in raw_text:
-            raw_text = raw_text.split("---")[0]
-        if "Namun, saya catatan" in raw_text:
-            raw_text = raw_text.split("Namun, saya catatan")[0]
-            
-        hasil_teks = raw_text.strip()
-        print("-> Teks berhasil diekstrak dan dibersihkan!")
+        # Potong teks sampah jika ada
+        if "---" in hasil_teks: hasil_teks = hasil_teks.split("---")[0]
+        if "Namun, saya catatan" in hasil_teks: hasil_teks = hasil_teks.split("Namun, saya catatan")[0]
         
-    except requests.exceptions.RequestException as e:
-        print(f"-> Exception (Request Error): {str(e)}")
-        return JSONResponse(content={"error": "Gagal terhubung ke AI server.", "detail": str(e)}, status_code=500)
+        print("-> OCR Berhasil!")
+        return JSONResponse({"hasil": hasil_teks.strip()})
+        
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f"-> Exception (Internal Error): {str(e)}")
-        return JSONResponse(content={"error": "Internal Processing Error.", "detail": str(e)}, status_code=500)
-        
-    # 5. Return JSON ke Flutter
-    return JSONResponse({
-        "hasil": hasil_teks
-    })
-
-# ==============================================================================
-# Endpoint /summarize (DINONAKTIFKAN MENTARA UNTUK MENGHEMAT RESOURCES)
-# ==============================================================================
+        print(f"-> Error: {str(e)}")
+        return JSONResponse(content={"error": "System Error", "detail": str(e)}, status_code=500)
 
 if __name__ == "__main__":
     import uvicorn
-    # [DEPLOYMENT PORT]: Port dinamis menyesuaikan request server dari Render.com
-    port = int(os.environ.get("PORT", 8000))
-    # Untuk server production uvicorn reload=True biasane dimatikan tapi ditambahkan secara command line
-    uvicorn.run("ocr_ai:app", host="0.0.0.0", port=port, reload=True)
+    # Jalankan di localhost port 8000
+    print("-> Server OCR Lokal Berjalan...")
+    uvicorn.run("ocr_ai:app", host="0.0.0.0", port=8000, reload=True)
