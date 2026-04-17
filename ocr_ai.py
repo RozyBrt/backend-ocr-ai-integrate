@@ -137,4 +137,4 @@ if __name__ == "__main__":
     # [DEPLOYMENT PORT]: Port dinamis menyesuaikan request server dari Render.com
     port = int(os.environ.get("PORT", 8000))
     # Untuk server production uvicorn reload=True biasane dimatikan tapi ditambahkan secara command line
-    uvicorn.run("ocr_ai:app", host="0.0.0.0", port=port)
+    uvicorn.run("ocr_ai:app", host="0.0.0.0", port=port, reload=True)
