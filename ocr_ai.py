@@ -139,6 +139,7 @@ async def summarize_text(req: SummarizeRequest):
 
 if __name__ == "__main__":
     import uvicorn
+    # Railway/Render memakai variabel PORT
     port = int(os.environ.get("PORT", 8000))
     print(f"-> Backend Dual-Brain berjalan di port {port}...")
-    uvicorn.run("ocr_ai:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("ocr_ai:app", host="0.0.0.0", port=port, reload=False if os.environ.get("PORT") else True)
