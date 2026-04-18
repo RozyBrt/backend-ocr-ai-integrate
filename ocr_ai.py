@@ -41,7 +41,7 @@ async def process_ocr(file: UploadFile = File(...)):
         # Baca config
         load_dotenv(override=True)
         api_key = os.getenv("SUMOPOD_API_KEY", "").strip()
-        ocr_model = os.getenv("OCR_MODEL", "claude-haiku-4-5")
+        ocr_model = os.getenv("OCR_MODEL", "gpt-4o-mini")
         sumopod_url = os.getenv("SUMOPOD_URL", "https://ai.sumopod.com/v1/chat/completions")
 
         headers = {
